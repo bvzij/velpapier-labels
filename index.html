@@ -228,7 +228,6 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 10px 14px;
     background: #fff;
     color: #111;
     position: relative;
@@ -254,12 +253,12 @@
   }
   .label-preview .sku-t {
     font-weight: 700;
-    font-family: "SF Mono", Consolas, monospace;
+    font-family: Arial, Helvetica, sans-serif;
     white-space: nowrap;
   }
   .label-preview .nm {
     font-weight: 700;
-    font-family: -apple-system, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -341,37 +340,54 @@
   #print-area { display: none; }
 
   @media print {
-    body * { visibility: hidden; }
-    #print-area, #print-area * { visibility: visible; }
-    #print-area {
-      display: block;
-      position: absolute;
-      left: 0;
-      top: 0;
-    }
     @page {
       size: 2in 1in;
       margin: 0;
     }
+    html, body {
+      width: 2in;
+      height: auto;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #fff;
+    }
+    .wrap { display: none !important; }
+    #print-area {
+      display: block;
+      width: 2in;
+      margin: 0;
+      padding: 0;
+    }
     .print-label {
       width: 2in;
       height: 1in;
+      margin: 0;
+      break-after: page;
       page-break-after: always;
+      break-inside: avoid;
+      page-break-inside: avoid;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       align-items: center;
-      padding: var(--print-pad-v, 0.03in) var(--print-pad-h, 0.06in);
+      padding-top: var(--print-pad-top, 0.03in);
+      padding-bottom: var(--print-pad-bottom, 0.03in);
+      padding-left: var(--print-pad-h, 0.06in);
+      padding-right: var(--print-pad-h, 0.06in);
       box-sizing: border-box;
       overflow: hidden;
     }
-    .print-label:last-child { page-break-after: auto; }
+    .print-label:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
     .print-line {
       text-align: center;
       width: 100%;
       line-height: 1.05;
       white-space: nowrap;
       overflow: hidden;
+      flex: none;
     }
     .print-line.one-line {
       display: flex;
@@ -385,14 +401,10 @@
       align-items: center;
       gap: 0.01in;
     }
-    .print-line .sku-txt {
-      font-weight: 700;
-      font-family: "Courier New", Consolas, monospace;
-      white-space: nowrap;
-    }
+    .print-line .sku-txt,
     .print-line .name-txt {
       font-weight: 700;
-      font-family: Arial, sans-serif;
+      font-family: Arial, Helvetica, sans-serif;
       white-space: nowrap;
     }
     .print-mid {
@@ -443,13 +455,17 @@
         <div class="settings-body">
           <div class="settings-row">
             <div>
-              <label for="pad-v">Margen superior/inferior (in)</label>
-              <input type="number" id="pad-v" value="0.03" min="0" max="0.3" step="0.01">
+              <label for="pad-top">Margen superior (in)</label>
+              <input type="number" id="pad-top" value="0.03" min="0" max="0.4" step="0.01">
             </div>
             <div>
-              <label for="pad-h">Margen lateral (in)</label>
-              <input type="number" id="pad-h" value="0.06" min="0" max="0.3" step="0.01">
+              <label for="pad-bottom">Margen inferior (in)</label>
+              <input type="number" id="pad-bottom" value="0.03" min="0" max="0.4" step="0.01">
             </div>
+          </div>
+          <div class="field" style="margin-top:10px;">
+            <label for="pad-h">Margen lateral (in)</label>
+            <input type="number" id="pad-h" value="0.06" min="0" max="0.3" step="0.01">
           </div>
           <div class="field" style="margin-top:10px;">
             <label for="font-sku">Tama&ntilde;o de letra (pt)</label>
@@ -465,7 +481,7 @@
             <input type="checkbox" id="auto-fit" checked style="width:auto; display:inline-block; margin-right:6px;">
             Ajuste autom&aacute;tico (dividir l&iacute;nea y reducir nombre si hace falta)
           </label>
-          <p class="hint">Si la impresi&oacute;n queda muy alta o muy baja en el rollo, ajusta el margen superior/inferior y haz una prueba. La configuraci&oacute;n se guarda en esta computadora.</p>
+          <p class="hint">Si la impresi&oacute;n queda muy alta o muy baja en el rollo, ajusta los m&aacute;rgenes superior e inferior por separado y haz una prueba. La configuraci&oacute;n se guarda en esta computadora.</p>
         </div>
       </details>
     </div>
@@ -502,7 +518,7 @@
 (function() {
   var batch = [];
   var history = [];
-  var settings = { padV: 0.03, padH: 0.06, fontSku: 14, minNameFont: 11, autoFit: true };
+  var settings = { padTop: 0.03, padBottom: 0.03, padH: 0.06, fontSku: 14, minNameFont: 11, autoFit: true };
 
   function loadLS(key, fallback) {
     try {
@@ -527,13 +543,24 @@
   var historyListEl = document.getElementById('history-list');
   var historyCountEl = document.getElementById('history-count');
 
-  var padV = document.getElementById('pad-v');
+  var padTop = document.getElementById('pad-top');
+  var padBottom = document.getElementById('pad-bottom');
   var padH = document.getElementById('pad-h');
   var fontSku = document.getElementById('font-sku');
   var minNameFont = document.getElementById('min-name-font');
   var autoFit = document.getElementById('auto-fit');
 
-  padV.value = settings.padV;
+  // migrate older saved settings that used a single padV value
+  if (settings.padV !== undefined && settings.padTop === undefined) {
+    settings.padTop = settings.padV;
+    settings.padBottom = settings.padV;
+    delete settings.padV;
+  }
+  if (settings.padTop === undefined) settings.padTop = 0.03;
+  if (settings.padBottom === undefined) settings.padBottom = 0.03;
+
+  padTop.value = settings.padTop;
+  padBottom.value = settings.padBottom;
   padH.value = settings.padH;
   fontSku.value = settings.fontSku;
   minNameFont.value = settings.minNameFont;
@@ -541,7 +568,8 @@
 
   function persistSettings() {
     settings = {
-      padV: parseFloat(padV.value) || 0.03,
+      padTop: parseFloat(padTop.value) || 0,
+      padBottom: parseFloat(padBottom.value) || 0,
       padH: parseFloat(padH.value) || 0.06,
       fontSku: parseInt(fontSku.value, 10) || 14,
       minNameFont: parseInt(minNameFont.value, 10) || 11,
@@ -549,7 +577,7 @@
     };
     saveLS('vp_label_settings', settings);
   }
-  [padV, padH, fontSku, minNameFont, autoFit].forEach(function(el) {
+  [padTop, padBottom, padH, fontSku, minNameFont, autoFit].forEach(function(el) {
     el.addEventListener('change', function() { persistSettings(); updatePreview(); });
   });
 
@@ -587,13 +615,13 @@
     // (3) two lines with name shrunk down to a floor, SKU stays full size,
     // (4) too-long.
 
-    var oneLineW = textWidthPx(sku, basePt, true, 'monospace') + gapPx + textWidthPx(name, basePt, true, 'sans-serif');
+    var oneLineW = textWidthPx(sku, basePt, true, 'Arial, Helvetica, sans-serif') + gapPx + textWidthPx(name, basePt, true, 'Arial, Helvetica, sans-serif');
     if (oneLineW <= availWidthPx) {
       return { mode: 'one-line', skuPt: basePt, namePt: basePt };
     }
 
-    var skuW = textWidthPx(sku, basePt, true, 'monospace');
-    var nameWFull = textWidthPx(name, basePt, true, 'sans-serif');
+    var skuW = textWidthPx(sku, basePt, true, 'Arial, Helvetica, sans-serif');
+    var nameWFull = textWidthPx(name, basePt, true, 'Arial, Helvetica, sans-serif');
     if (skuW <= availWidthPx && nameWFull <= availWidthPx) {
       return { mode: 'two-line', skuPt: basePt, namePt: basePt };
     }
@@ -606,7 +634,7 @@
     var step = 0.5;
     var floor = minNamePt || 9;
     while (namePt >= floor) {
-      if (textWidthPx(name, namePt, true, 'sans-serif') <= availWidthPx) {
+      if (textWidthPx(name, namePt, true, 'Arial, Helvetica, sans-serif') <= availWidthPx) {
         return { mode: 'two-line', skuPt: basePt, namePt: namePt };
       }
       namePt -= step;
@@ -625,7 +653,16 @@
     var basePt = parseInt(fontSku.value, 10) || 14;
 
     var previewEl = document.getElementById('live-preview');
-    var availWidth = previewEl.clientWidth - 28; // minus l/r padding
+    // mirror the real label margins in the preview, scaled to its size
+    var pxPerInch = previewEl.clientWidth / 2; // preview width represents 2in
+    var padTopPx = (parseFloat(padTop.value) || 0) * pxPerInch;
+    var padBottomPx = (parseFloat(padBottom.value) || 0) * pxPerInch;
+    var padHPx = (parseFloat(padH.value) || 0) * pxPerInch;
+    previewEl.style.paddingTop = padTopPx + 'px';
+    previewEl.style.paddingBottom = padBottomPx + 'px';
+    previewEl.style.paddingLeft = padHPx + 'px';
+    previewEl.style.paddingRight = padHPx + 'px';
+    var availWidth = previewEl.clientWidth - (padHPx * 2);
     // scale the gap proportionally: preview is 320px wide representing a 2in label
     var gapPx = GAP_IN * (previewEl.clientWidth / 2);
 
@@ -873,8 +910,10 @@
   function buildPrintHtml() {
     var printArea = document.getElementById('print-area');
     printArea.innerHTML = '';
-    printArea.style.setProperty('--print-pad-v', settings.padV + 'in');
-    printArea.style.setProperty('--print-pad-h', settings.padH + 'in');
+    var rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--print-pad-top', settings.padTop + 'in');
+    rootStyle.setProperty('--print-pad-bottom', settings.padBottom + 'in');
+    rootStyle.setProperty('--print-pad-h', settings.padH + 'in');
 
     var availWidth = printAvailWidthPx();
     var gapPx = GAP_IN * 96;
