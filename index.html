@@ -350,6 +350,15 @@
       margin: 0 !important;
       padding: 0 !important;
       background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      zoom: 1 !important;
+      transform: none !important;
+      font-size: 16px;
+    }
+    * {
+      -webkit-text-size-adjust: none !important;
+      text-size-adjust: none !important;
     }
     .wrap { display: none !important; }
     #print-area {
@@ -662,14 +671,20 @@
     previewEl.style.paddingBottom = padBottomPx + 'px';
     previewEl.style.paddingLeft = padHPx + 'px';
     previewEl.style.paddingRight = padHPx + 'px';
-    var availWidth = previewEl.clientWidth - (padHPx * 2);
-    // scale the gap proportionally: preview is 320px wide representing a 2in label
-    var gapPx = GAP_IN * (previewEl.clientWidth / 2);
+    // Decide the layout using the SAME metrics the printer uses (96 CSS px
+    // per inch), not the preview's own pixel scale -- otherwise the preview
+    // and the printed label disagree about what fits on one line.
+    var printAvail = (2 - ((parseFloat(padH.value) || 0) * 2)) * 96;
+    var printGap = GAP_IN * 96;
 
     var minPt = parseInt(minNameFont.value, 10) || 11;
     var result = autoFit.checked
-      ? fitLabel(sku, name, basePt, minPt, availWidth, gapPx)
+      ? fitLabel(sku, name, basePt, minPt, printAvail, printGap)
       : { mode: 'one-line', skuPt: basePt, namePt: basePt };
+
+    // The preview box is wider on screen than the physical 2in label, so
+    // scale the point sizes up by the same factor for an accurate picture.
+    var previewScale = pxPerInch / 96;
 
     var topLine = document.getElementById('pv-top');
     var botLine = document.getElementById('pv-bot');
@@ -692,31 +707,29 @@
 
     function renderLine(el) {
       el.innerHTML = '';
+      var skuPx = result.skuPt * (96 / 72) * previewScale;
+      var namePx = result.namePt * (96 / 72) * previewScale;
+      var gapDisplayPx = GAP_IN * pxPerInch;
+
+      var skuSpan = document.createElement('span');
+      skuSpan.className = 'sku-t';
+      skuSpan.textContent = sku;
+      skuSpan.style.fontSize = skuPx + 'px';
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'nm';
+      nameSpan.textContent = name;
+      nameSpan.style.fontSize = namePx + 'px';
+
       if (result.mode === 'one-line') {
         el.className = 'line one-line';
-        var skuSpan = document.createElement('span');
-        skuSpan.className = 'sku-t';
-        skuSpan.textContent = sku;
-        skuSpan.style.fontSize = result.skuPt + 'pt';
-        var nameSpan = document.createElement('span');
-        nameSpan.className = 'nm';
-        nameSpan.textContent = name;
-        nameSpan.style.fontSize = result.namePt + 'pt';
-        el.appendChild(skuSpan);
-        el.appendChild(nameSpan);
+        el.style.gap = gapDisplayPx + 'px';
       } else {
         el.className = 'line two-line';
-        var skuSpan2 = document.createElement('span');
-        skuSpan2.className = 'sku-t';
-        skuSpan2.textContent = sku;
-        skuSpan2.style.fontSize = result.skuPt + 'pt';
-        var nameSpan2 = document.createElement('span');
-        nameSpan2.className = 'nm';
-        nameSpan2.textContent = name;
-        nameSpan2.style.fontSize = result.namePt + 'pt';
-        el.appendChild(skuSpan2);
-        el.appendChild(nameSpan2);
+        el.style.gap = '';
       }
+      el.appendChild(skuSpan);
+      el.appendChild(nameSpan);
     }
     renderLine(topLine);
     renderLine(botLine);
