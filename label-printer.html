@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vel Papier — impresora de etiquetas</title>
+<style>
+  :root {
+    --bg: #faf9f6;
+    --card: #ffffff;
+    --border: #e2ddd3;
+    --text: #2c2a26;
+    --text-muted: #8a8578;
+    --accent: #c17a4f;
+    --accent-dark: #a2602f;
+    --danger: #b8433a;
+    --radius: 10px;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1a17;
+      --card: #272420;
+      --border: #3c3730;
+      --text: #efece6;
+      --text-muted: #9c9686;
+      --accent: #d98f5f;
+      --accent-dark: #e8a878;
+      --danger: #e2655a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1a17;
+    --card: #272420;
+    --border: #3c3730;
+    --text: #efece6;
+    --text-muted: #9c9686;
+    --accent: #d98f5f;
+    --accent-dark: #e8a878;
+    --danger: #e2655a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 28px 18px 60px;
+  }
+  h1 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 22px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  @media (min-width: 760px) {
+    .grid { grid-template-columns: 340px 1fr; align-items: start; }
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 4px;
+  }
+  .field { margin-bottom: 12px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .qty-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .qty-row input { width: 70px; flex: none; text-align: center; }
+  .qty-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    cursor: pointer;
+    flex: none;
+  }
+  .qty-btn:active { transform: scale(0.95); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--bg); }
+  .btn-danger-text {
+    background: transparent;
+    color: var(--danger);
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+  .batch-item .edit-row {
+    color: var(--accent);
+    font-size: 14px;
+  }
+  .err {
+    color: var(--danger);
+    font-size: 12px;
+    margin: -6px 0 10px;
+    min-height: 0;
+  }
+  .batch-list {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+  .batch-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .batch-item:last-child { border-bottom: none; }
+  .batch-item .info { flex: 1; min-width: 0; }
+  .batch-item .sku {
+    font-weight: 600;
+    font-size: 13px;
+    font-family: "SF Mono", Consolas, monospace;
+  }
+  .batch-item .name {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .batch-item .qty {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    flex: none;
+  }
+  .empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 24px 0;
+  }
+  .batch-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+  }
+  .preview-box {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0 6px;
+  }
+  .label-preview {
+    width: 320px;
+    height: 160px;
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #fff;
+    color: #111;
+    position: relative;
+  }
+  .label-preview .line {
+    text-align: center;
+    line-height: 1.15;
+    width: 100%;
+  }
+  .label-preview .line.one-line {
+    white-space: nowrap;
+    overflow: hidden;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+  }
+  .label-preview .line.two-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+  .label-preview .sku-t {
+    font-weight: 700;
+    font-family: "SF Mono", Consolas, monospace;
+    white-space: nowrap;
+  }
+  .label-preview .nm {
+    font-weight: 700;
+    font-family: -apple-system, sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .label-preview .mid-dash {
+    border-top: 1px dashed #ccc;
+    margin: 0;
+  }
+  .label-preview .too-long {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #b8433a;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 12px;
+  }
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  details.settings { margin-top: 16px; }
+  details.settings summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  details.settings .settings-body { margin-top: 12px; }
+  .hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: inherit;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .hist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .hist-item .info { flex: 1; min-width: 0; }
+  .hist-item .meta { font-size: 11px; color: var(--text-muted); }
+  .hist-add {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--accent);
+    flex: none;
+  }
+
+  #print-area { display: none; }
+
+  @media print {
+    body * { visibility: hidden; }
+    #print-area, #print-area * { visibility: visible; }
+    #print-area {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    @page {
+      size: 2in 1in;
+      margin: 0;
+    }
+    .print-label {
+      width: 2in;
+      height: 1in;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--print-pad-v, 0.03in) var(--print-pad-h, 0.06in);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .print-label:last-child { page-break-after: auto; }
+    .print-line {
+      text-align: center;
+      width: 100%;
+      line-height: 1.05;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .print-line.one-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 0.08in;
+    }
+    .print-line.two-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.01in;
+    }
+    .print-line .sku-txt {
+      font-weight: 700;
+      font-family: "Courier New", Consolas, monospace;
+      white-space: nowrap;
+    }
+    .print-line .name-txt {
+      font-weight: 700;
+      font-family: Arial, sans-serif;
+      white-space: nowrap;
+    }
+    .print-mid {
+      width: 100%;
+      border-top: 1px dotted #999;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Impresora de etiquetas de inventario</h1>
+  <p class="sub">Rollo t&eacute;rmico 2&quot; &times; 1&quot; &middot; SKU + nombre, arriba y abajo</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Agregar etiqueta</h2>
+      <div class="field">
+        <label for="sku-input">SKU</label>
+        <input type="text" id="sku-input" placeholder="ej. NB-042" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="name-input">Nombre</label>
+        <input type="text" id="name-input" placeholder="ej. Sakura cuadr&iacute;cula A5" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="qty-input">Copias</label>
+        <div class="qty-row">
+          <button class="qty-btn" id="qty-minus" type="button" aria-label="Disminuir">&minus;</button>
+          <input type="number" id="qty-input" value="1" min="1" max="200">
+          <button class="qty-btn" id="qty-plus" type="button" aria-label="Aumentar">+</button>
+        </div>
+      </div>
+      <div class="err" id="form-err"></div>
+      <button class="btn btn-primary" id="add-btn" type="button">Agregar al lote</button>
+
+      <div class="preview-box">
+        <div class="label-preview" id="live-preview">
+          <div class="line" id="pv-top"></div>
+          <div class="mid-dash"></div>
+          <div class="line" id="pv-bot"></div>
+        </div>
+      </div>
+
+      <details class="settings">
+        <summary>Calibraci&oacute;n de impresi&oacute;n</summary>
+        <div class="settings-body">
+          <div class="settings-row">
+            <div>
+              <label for="pad-v">Margen superior/inferior (in)</label>
+              <input type="number" id="pad-v" value="0.03" min="0" max="0.3" step="0.01">
+            </div>
+            <div>
+              <label for="pad-h">Margen lateral (in)</label>
+              <input type="number" id="pad-h" value="0.06" min="0" max="0.3" step="0.01">
+            </div>
+          </div>
+          <div class="field" style="margin-top:10px;">
+            <label for="font-sku">Tama&ntilde;o de letra (pt)</label>
+            <input type="number" id="font-sku" value="14" min="8" max="30">
+            <p class="hint">El SKU y el nombre se imprimen a este mismo tama&ntilde;o cuando caben en una l&iacute;nea. Si no caben, se divide en dos l&iacute;neas (SKU arriba) a este mismo tama&ntilde;o; solo el nombre se reduce m&aacute;s si sigue sin caber en su propia l&iacute;nea.</p>
+          </div>
+          <div class="field">
+            <label for="min-name-font">Tama&ntilde;o m&iacute;nimo del nombre (pt)</label>
+            <input type="number" id="min-name-font" value="11" min="6" max="20">
+            <p class="hint">En el formato de dos l&iacute;neas, el nombre no se reduce m&aacute;s all&aacute; de este tama&ntilde;o. Si a&uacute;n as&iacute; no cabe, la etiqueta se bloquea en vez de imprimirse ileg&iacute;ble.</p>
+          </div>
+          <label style="margin-top:4px;">
+            <input type="checkbox" id="auto-fit" checked style="width:auto; display:inline-block; margin-right:6px;">
+            Ajuste autom&aacute;tico (dividir l&iacute;nea y reducir nombre si hace falta)
+          </label>
+          <p class="hint">Si la impresi&oacute;n queda muy alta o muy baja en el rollo, ajusta el margen superior/inferior y haz una prueba. La configuraci&oacute;n se guarda en esta computadora.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-batch" type="button">Lote actual</button>
+        <button class="tab-btn" id="tab-history" type="button">Historial</button>
+      </div>
+
+      <div id="batch-view">
+        <ul class="batch-list" id="batch-list"></ul>
+        <div class="batch-footer">
+          <span id="batch-count">0 etiquetas</span>
+          <button class="btn-danger-text" id="clear-batch" type="button">Vaciar lote</button>
+        </div>
+        <button class="btn btn-primary" id="print-btn" type="button">Imprimir lote</button>
+      </div>
+
+      <div id="history-view" style="display:none;">
+        <ul class="batch-list" id="history-list"></ul>
+        <div class="batch-footer">
+          <span id="history-count">0 guardadas</span>
+          <button class="btn-danger-text" id="clear-history" type="button">Borrar historial</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="print-area"></div>
+
+<script>
+(function() {
+  var batch = [];
+  var history = [];
+  var settings = { padV: 0.03, padH: 0.06, fontSku: 14, minNameFont: 11, autoFit: true };
+
+  function loadLS(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function saveLS(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  history = loadLS('vp_label_history', []);
+  var savedSettings = loadLS('vp_label_settings', null);
+  if (savedSettings) settings = savedSettings;
+
+  var skuInput = document.getElementById('sku-input');
+  var nameInput = document.getElementById('name-input');
+  var qtyInput = document.getElementById('qty-input');
+  var formErr = document.getElementById('form-err');
+  var batchListEl = document.getElementById('batch-list');
+  var batchCountEl = document.getElementById('batch-count');
+  var historyListEl = document.getElementById('history-list');
+  var historyCountEl = document.getElementById('history-count');
+
+  var padV = document.getElementById('pad-v');
+  var padH = document.getElementById('pad-h');
+  var fontSku = document.getElementById('font-sku');
+  var minNameFont = document.getElementById('min-name-font');
+  var autoFit = document.getElementById('auto-fit');
+
+  padV.value = settings.padV;
+  padH.value = settings.padH;
+  fontSku.value = settings.fontSku;
+  minNameFont.value = settings.minNameFont;
+  autoFit.checked = settings.autoFit;
+
+  function persistSettings() {
+    settings = {
+      padV: parseFloat(padV.value) || 0.03,
+      padH: parseFloat(padH.value) || 0.06,
+      fontSku: parseInt(fontSku.value, 10) || 14,
+      minNameFont: parseInt(minNameFont.value, 10) || 11,
+      autoFit: autoFit.checked
+    };
+    saveLS('vp_label_settings', settings);
+  }
+  [padV, padH, fontSku, minNameFont, autoFit].forEach(function(el) {
+    el.addEventListener('change', function() { persistSettings(); updatePreview(); });
+  });
+
+  document.getElementById('qty-minus').addEventListener('click', function() {
+    var v = parseInt(qtyInput.value, 10) || 1;
+    qtyInput.value = Math.max(1, v - 1);
+  });
+  document.getElementById('qty-plus').addEventListener('click', function() {
+    var v = parseInt(qtyInput.value, 10) || 1;
+    qtyInput.value = Math.min(200, v + 1);
+  });
+
+  // --- fit engine ---------------------------------------------------
+  // Measures actual rendered text width (via canvas) to decide: fit on
+  // one line (shrinking down to a floor), fall back to two lines
+  // (SKU fixed at floor size, name on its own line, also shrinking to
+  // a floor), or flag as too long to print.
+
+  var GAP_IN = 0.1;
+
+  var measureCanvas = document.createElement('canvas');
+  var measureCtx = measureCanvas.getContext('2d');
+
+  function textWidthPx(text, pt, bold, fontFamily) {
+    // measure at a fixed DPI-independent px-per-pt approximation (96/72)
+    var px = pt * (96 / 72);
+    measureCtx.font = (bold ? '700 ' : '400 ') + px + 'px ' + fontFamily;
+    return measureCtx.measureText(text).width;
+  }
+
+  function fitLabel(sku, name, basePt, minNamePt, availWidthPx, gapPx) {
+    // basePt is used for BOTH sku and name — they read as matching sizes,
+    // same as the Canva reference (13/12pt, effectively equal).
+    // Priority: (1) one line at full size, (2) two lines at full size,
+    // (3) two lines with name shrunk down to a floor, SKU stays full size,
+    // (4) too-long.
+
+    var oneLineW = textWidthPx(sku, basePt, true, 'monospace') + gapPx + textWidthPx(name, basePt, true, 'sans-serif');
+    if (oneLineW <= availWidthPx) {
+      return { mode: 'one-line', skuPt: basePt, namePt: basePt };
+    }
+
+    var skuW = textWidthPx(sku, basePt, true, 'monospace');
+    var nameWFull = textWidthPx(name, basePt, true, 'sans-serif');
+    if (skuW <= availWidthPx && nameWFull <= availWidthPx) {
+      return { mode: 'two-line', skuPt: basePt, namePt: basePt };
+    }
+
+    if (skuW > availWidthPx) {
+      return { mode: 'too-long' }; // SKU itself too wide even alone; shrinking name won't help
+    }
+
+    var namePt = basePt;
+    var step = 0.5;
+    var floor = minNamePt || 9;
+    while (namePt >= floor) {
+      if (textWidthPx(name, namePt, true, 'sans-serif') <= availWidthPx) {
+        return { mode: 'two-line', skuPt: basePt, namePt: namePt };
+      }
+      namePt -= step;
+    }
+
+    return { mode: 'too-long' };
+  }
+
+  // Available width in px for the live preview box (320px wide, minus
+  // left/right padding of 14px each ~= matches the 2in label proportionally
+  // once scaled). We use the actual rendered box width at render time.
+
+  function updatePreview() {
+    var sku = skuInput.value.trim() || 'SKU';
+    var name = nameInput.value.trim() || 'Name';
+    var basePt = parseInt(fontSku.value, 10) || 14;
+
+    var previewEl = document.getElementById('live-preview');
+    var availWidth = previewEl.clientWidth - 28; // minus l/r padding
+    // scale the gap proportionally: preview is 320px wide representing a 2in label
+    var gapPx = GAP_IN * (previewEl.clientWidth / 2);
+
+    var minPt = parseInt(minNameFont.value, 10) || 11;
+    var result = autoFit.checked
+      ? fitLabel(sku, name, basePt, minPt, availWidth, gapPx)
+      : { mode: 'one-line', skuPt: basePt, namePt: basePt };
+
+    var topLine = document.getElementById('pv-top');
+    var botLine = document.getElementById('pv-bot');
+    var existingErr = previewEl.querySelector('.too-long');
+    if (existingErr) existingErr.remove();
+    topLine.style.display = '';
+    botLine.style.display = '';
+    document.querySelector('.mid-dash').style.display = '';
+
+    if (result.mode === 'too-long') {
+      topLine.style.display = 'none';
+      botLine.style.display = 'none';
+      document.querySelector('.mid-dash').style.display = 'none';
+      var errDiv = document.createElement('div');
+      errDiv.className = 'too-long';
+      errDiv.textContent = "No cabe \u2014 acorta el nombre o el SKU";
+      previewEl.appendChild(errDiv);
+      return;
+    }
+
+    function renderLine(el) {
+      el.innerHTML = '';
+      if (result.mode === 'one-line') {
+        el.className = 'line one-line';
+        var skuSpan = document.createElement('span');
+        skuSpan.className = 'sku-t';
+        skuSpan.textContent = sku;
+        skuSpan.style.fontSize = result.skuPt + 'pt';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'nm';
+        nameSpan.textContent = name;
+        nameSpan.style.fontSize = result.namePt + 'pt';
+        el.appendChild(skuSpan);
+        el.appendChild(nameSpan);
+      } else {
+        el.className = 'line two-line';
+        var skuSpan2 = document.createElement('span');
+        skuSpan2.className = 'sku-t';
+        skuSpan2.textContent = sku;
+        skuSpan2.style.fontSize = result.skuPt + 'pt';
+        var nameSpan2 = document.createElement('span');
+        nameSpan2.className = 'nm';
+        nameSpan2.textContent = name;
+        nameSpan2.style.fontSize = result.namePt + 'pt';
+        el.appendChild(skuSpan2);
+        el.appendChild(nameSpan2);
+      }
+    }
+    renderLine(topLine);
+    renderLine(botLine);
+  }
+  skuInput.addEventListener('input', updatePreview);
+  nameInput.addEventListener('input', updatePreview);
+  window.addEventListener('resize', updatePreview);
+  updatePreview();
+
+  function clearErr() { formErr.textContent = ''; }
+  skuInput.addEventListener('input', clearErr);
+  nameInput.addEventListener('input', clearErr);
+
+  function renderBatch() {
+    batchListEl.innerHTML = '';
+    if (batch.length === 0) {
+      batchListEl.innerHTML = '<li class="empty">A&uacute;n no hay etiquetas agregadas.</li>';
+    } else {
+      batch.forEach(function(item, idx) {
+        var li = document.createElement('li');
+        li.className = 'batch-item';
+        li.innerHTML =
+          '<div class="info"><div class="sku"></div><div class="name"></div></div>' +
+          '<div class="qty"></div>' +
+          '<button class="btn-danger-text edit-row" type="button" aria-label="Editar">&#9998;</button>' +
+          '<button class="btn-danger-text" type="button" aria-label="Eliminar">&times;</button>';
+        li.querySelector('.sku').textContent = item.sku;
+        li.querySelector('.name').textContent = item.name;
+        li.querySelector('.qty').textContent = 'x' + item.qty;
+        li.querySelector('.edit-row').addEventListener('click', function() {
+          skuInput.value = item.sku;
+          nameInput.value = item.name;
+          qtyInput.value = item.qty;
+          batch.splice(idx, 1);
+          renderBatch();
+          updatePreview();
+          skuInput.focus();
+        });
+        li.querySelectorAll('.btn-danger-text')[1].addEventListener('click', function() {
+          batch.splice(idx, 1);
+          renderBatch();
+        });
+        batchListEl.appendChild(li);
+      });
+    }
+    var total = batch.reduce(function(sum, i) { return sum + i.qty; }, 0);
+    batchCountEl.textContent = total + ' etiqueta' + (total === 1 ? '' : 's') + ' (' + batch.length + ' SKU' + (batch.length === 1 ? '' : 's') + ')';
+  }
+
+  function renderHistory() {
+    historyListEl.innerHTML = '';
+    if (history.length === 0) {
+      historyListEl.innerHTML = '<li class="empty">A&uacute;n no se ha impreso nada.</li>';
+    } else {
+      history.slice().reverse().forEach(function(item) {
+        var li = document.createElement('li');
+        li.className = 'hist-item';
+        var d = new Date(item.ts);
+        var dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        li.innerHTML =
+          '<div class="info"><div class="sku" style="font-weight:600; font-family:monospace;"></div><div class="meta"></div></div>' +
+          '<button class="hist-add" type="button" aria-label="Agregar al lote">+</button>';
+        li.querySelector('.sku').textContent = item.sku + '  ' + item.name;
+        li.querySelector('.meta').textContent = 'x' + item.qty + ' \u00b7 ' + dateStr;
+        li.querySelector('.hist-add').addEventListener('click', function() {
+          batch.push({ sku: item.sku, name: item.name, qty: item.qty });
+          renderBatch();
+          document.getElementById('tab-batch').click();
+        });
+        historyListEl.appendChild(li);
+      });
+    }
+    historyCountEl.textContent = history.length + ' registradas';
+  }
+
+  document.getElementById('add-btn').addEventListener('click', function() {
+    var sku = skuInput.value.trim();
+    var name = nameInput.value.trim();
+    var qty = parseInt(qtyInput.value, 10);
+
+    if (!sku) {
+      formErr.textContent = 'Primero ingresa un SKU';
+      skuInput.focus();
+      return;
+    }
+    if (!name) {
+      formErr.textContent = 'Primero ingresa un nombre';
+      nameInput.focus();
+      return;
+    }
+    if (!qty || qty < 1) {
+      formErr.textContent = 'Las copias deben ser al menos 1';
+      qtyInput.focus();
+      return;
+    }
+    if (autoFit.checked) {
+      var fitCheck = fitLabel(sku, name, parseInt(fontSku.value, 10) || 14, parseInt(minNameFont.value, 10) || 11, printAvailWidthPx(), GAP_IN * 96);
+      if (fitCheck.mode === 'too-long') {
+        formErr.textContent = "No cabe ni con el tama\u00f1o m\u00ednimo \u2014 acorta el nombre o el SKU";
+        return;
+      }
+    }
+    clearErr();
+    batch.push({ sku: sku, name: name, qty: qty });
+    renderBatch();
+    skuInput.value = '';
+    nameInput.value = '';
+    qtyInput.value = '1';
+    updatePreview();
+    skuInput.focus();
+  });
+
+  skuInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      nameInput.focus();
+      nameInput.select();
+    }
+  });
+  nameInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      qtyInput.focus();
+      qtyInput.select();
+    }
+  });
+  qtyInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('add-btn').click();
+    }
+  });
+
+  document.getElementById('clear-batch').addEventListener('click', function() {
+    if (batch.length === 0) return;
+    if (confirm('\u00bfVaciar el lote actual?')) {
+      batch = [];
+      renderBatch();
+    }
+  });
+
+  document.getElementById('clear-history').addEventListener('click', function() {
+    if (history.length === 0) return;
+    if (confirm('\u00bfBorrar todo el historial de impresi\u00f3n? Esto no se puede deshacer.')) {
+      history = [];
+      saveLS('vp_label_history', history);
+      renderHistory();
+    }
+  });
+
+  document.getElementById('tab-batch').addEventListener('click', function() {
+    document.getElementById('tab-batch').classList.add('active');
+    document.getElementById('tab-history').classList.remove('active');
+    document.getElementById('batch-view').style.display = '';
+    document.getElementById('history-view').style.display = 'none';
+  });
+  document.getElementById('tab-history').addEventListener('click', function() {
+    document.getElementById('tab-history').classList.add('active');
+    document.getElementById('tab-batch').classList.remove('active');
+    document.getElementById('history-view').style.display = '';
+    document.getElementById('batch-view').style.display = 'none';
+    renderHistory();
+  });
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // 2in label width in px at 96 CSS px/in, minus the configured side
+  // margins on both sides and the inter-line gap allowance.
+  function printAvailWidthPx() {
+    var totalInches = 2 - (settings.padH * 2);
+    return totalInches * 96;
+  }
+
+  function checkBatchFits() {
+    var tooLong = [];
+    var availWidth = printAvailWidthPx();
+    var gapPx = GAP_IN * 96;
+    batch.forEach(function(item) {
+      var result = settings.autoFit
+        ? fitLabel(item.sku, item.name, settings.fontSku, settings.minNameFont, availWidth, gapPx)
+        : { mode: 'one-line', skuPt: settings.fontSku, namePt: settings.fontSku };
+      if (result.mode === 'too-long') tooLong.push(item.sku + ' \u2014 ' + item.name);
+    });
+    return tooLong;
+  }
+
+  function buildPrintHtml() {
+    var printArea = document.getElementById('print-area');
+    printArea.innerHTML = '';
+    printArea.style.setProperty('--print-pad-v', settings.padV + 'in');
+    printArea.style.setProperty('--print-pad-h', settings.padH + 'in');
+
+    var availWidth = printAvailWidthPx();
+    var gapPx = GAP_IN * 96;
+
+    batch.forEach(function(item) {
+      var result = settings.autoFit
+        ? fitLabel(item.sku, item.name, settings.fontSku, settings.minNameFont, availWidth, gapPx)
+        : { mode: 'one-line', skuPt: settings.fontSku, namePt: settings.fontSku };
+
+      for (var i = 0; i < item.qty; i++) {
+        var labelDiv = document.createElement('div');
+        labelDiv.className = 'print-label';
+
+        var lineClass = result.mode === 'two-line' ? 'print-line two-line' : 'print-line one-line';
+        var lineHtml = function() {
+          return '<div class="' + lineClass + '">' +
+            '<span class="sku-txt" style="font-size:' + result.skuPt + 'pt;">' + escapeHtml(item.sku) + '</span>' +
+            '<span class="name-txt" style="font-size:' + result.namePt + 'pt;">' + escapeHtml(item.name) + '</span>' +
+            '</div>';
+        };
+
+        labelDiv.innerHTML = lineHtml() + '<div class="print-mid"></div>' + lineHtml();
+        printArea.appendChild(labelDiv);
+      }
+    });
+  }
+
+  document.getElementById('print-btn').addEventListener('click', function() {
+    if (batch.length === 0) {
+      alert('Primero agrega al menos una etiqueta al lote.');
+      return;
+    }
+    var tooLong = checkBatchFits();
+    if (tooLong.length > 0) {
+      alert("Estas etiquetas no caben ni con el tama\u00f1o m\u00ednimo \u2014 acort\u00e1las primero:\n\n" + tooLong.join('\n'));
+      return;
+    }
+    buildPrintHtml();
+    window.print();
+  });
+
+  window.addEventListener('afterprint', function() {
+    var now = Date.now();
+    batch.forEach(function(item) {
+      history.push({ sku: item.sku, name: item.name, qty: item.qty, ts: now });
+    });
+    saveLS('vp_label_history', history);
+    if (confirm('Impreso. \u00bfVaciar el lote actual?')) {
+      batch = [];
+      renderBatch();
+    }
+  });
+
+  renderBatch();
+  renderHistory();
+})();
+</script>
+
+</body>
+</html>
