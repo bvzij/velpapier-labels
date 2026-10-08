@@ -490,7 +490,7 @@
             <input type="checkbox" id="auto-fit" checked style="width:auto; display:inline-block; margin-right:6px;">
             Ajuste autom&aacute;tico (dividir l&iacute;nea y reducir nombre si hace falta)
           </label>
-          <p class="hint">Si la impresi&oacute;n queda muy alta o muy baja en el rollo, ajusta los m&aacute;rgenes superior e inferior por separado y haz una prueba. La configuraci&oacute;n se guarda en esta computadora.</p>
+          <p class="hint">Los m&aacute;rgenes se guardan con cada etiqueta al agregarla al lote y vuelven al valor por defecto despu&eacute;s de cada una. Cambiar los m&aacute;rgenes no afecta a las etiquetas ya agregadas. El tama&ntilde;o de letra s&iacute; se guarda en esta computadora.</p>
         </div>
       </details>
     </div>
@@ -527,6 +527,7 @@
 (function() {
   var batch = [];
   var history = [];
+  var DEFAULT_MARGINS = { padTop: 0.03, padBottom: 0.03, padH: 0.06 };
   var settings = { padTop: 0.03, padBottom: 0.03, padH: 0.06, fontSku: 14, minNameFont: 11, autoFit: true };
 
   function loadLS(key, fallback) {
@@ -559,27 +560,41 @@
   var minNameFont = document.getElementById('min-name-font');
   var autoFit = document.getElementById('auto-fit');
 
-  // migrate older saved settings that used a single padV value
-  if (settings.padV !== undefined && settings.padTop === undefined) {
-    settings.padTop = settings.padV;
-    settings.padBottom = settings.padV;
-    delete settings.padV;
-  }
-  if (settings.padTop === undefined) settings.padTop = 0.03;
-  if (settings.padBottom === undefined) settings.padBottom = 0.03;
-
-  padTop.value = settings.padTop;
-  padBottom.value = settings.padBottom;
-  padH.value = settings.padH;
+  // Margins always start at the defaults on load -- they are captured
+  // per-label at add time, not remembered globally.
+  padTop.value = DEFAULT_MARGINS.padTop;
+  padBottom.value = DEFAULT_MARGINS.padBottom;
+  padH.value = DEFAULT_MARGINS.padH;
   fontSku.value = settings.fontSku;
   minNameFont.value = settings.minNameFont;
   autoFit.checked = settings.autoFit;
 
-  function persistSettings() {
-    settings = {
+  function currentMargins() {
+    return {
       padTop: parseFloat(padTop.value) || 0,
       padBottom: parseFloat(padBottom.value) || 0,
-      padH: parseFloat(padH.value) || 0.06,
+      padH: parseFloat(padH.value) || 0
+    };
+  }
+
+  function resetMarginFields() {
+    padTop.value = DEFAULT_MARGINS.padTop;
+    padBottom.value = DEFAULT_MARGINS.padBottom;
+    padH.value = DEFAULT_MARGINS.padH;
+  }
+
+  function applyMargins(m) {
+    padTop.value = m.padTop;
+    padBottom.value = m.padBottom;
+    padH.value = m.padH;
+  }
+
+  function persistSettings() {
+    // only font/fit settings persist; margins are per-label
+    settings = {
+      padTop: DEFAULT_MARGINS.padTop,
+      padBottom: DEFAULT_MARGINS.padBottom,
+      padH: DEFAULT_MARGINS.padH,
       fontSku: parseInt(fontSku.value, 10) || 14,
       minNameFont: parseInt(minNameFont.value, 10) || 11,
       autoFit: autoFit.checked
@@ -756,13 +771,18 @@
           '<div class="qty"></div>' +
           '<button class="btn-danger-text edit-row" type="button" aria-label="Editar">&#9998;</button>' +
           '<button class="btn-danger-text" type="button" aria-label="Eliminar">&times;</button>';
+        var m = item.margins || DEFAULT_MARGINS;
+        var isCustom = m.padTop !== DEFAULT_MARGINS.padTop ||
+                       m.padBottom !== DEFAULT_MARGINS.padBottom ||
+                       m.padH !== DEFAULT_MARGINS.padH;
         li.querySelector('.sku').textContent = item.sku;
-        li.querySelector('.name').textContent = item.name;
+        li.querySelector('.name').textContent = item.name + (isCustom ? '  \u2022 m\u00e1rgenes propios' : '');
         li.querySelector('.qty').textContent = 'x' + item.qty;
         li.querySelector('.edit-row').addEventListener('click', function() {
           skuInput.value = item.sku;
           nameInput.value = item.name;
           qtyInput.value = item.qty;
+          applyMargins(item.margins || DEFAULT_MARGINS);
           batch.splice(idx, 1);
           renderBatch();
           updatePreview();
@@ -792,10 +812,20 @@
         li.innerHTML =
           '<div class="info"><div class="sku" style="font-weight:600; font-family:monospace;"></div><div class="meta"></div></div>' +
           '<button class="hist-add" type="button" aria-label="Agregar al lote">+</button>';
+        var hm = item.margins || DEFAULT_MARGINS;
+        var hCustom = hm.padTop !== DEFAULT_MARGINS.padTop ||
+                      hm.padBottom !== DEFAULT_MARGINS.padBottom ||
+                      hm.padH !== DEFAULT_MARGINS.padH;
         li.querySelector('.sku').textContent = item.sku + '  ' + item.name;
-        li.querySelector('.meta').textContent = 'x' + item.qty + ' \u00b7 ' + dateStr;
+        li.querySelector('.meta').textContent = 'x' + item.qty + ' \u00b7 ' + dateStr +
+          (hCustom ? ' \u00b7 m\u00e1rgenes propios' : '');
         li.querySelector('.hist-add').addEventListener('click', function() {
-          batch.push({ sku: item.sku, name: item.name, qty: item.qty });
+          batch.push({
+            sku: item.sku,
+            name: item.name,
+            qty: item.qty,
+            margins: item.margins || DEFAULT_MARGINS
+          });
           renderBatch();
           document.getElementById('tab-batch').click();
         });
@@ -833,11 +863,12 @@
       }
     }
     clearErr();
-    batch.push({ sku: sku, name: name, qty: qty });
+    batch.push({ sku: sku, name: name, qty: qty, margins: currentMargins() });
     renderBatch();
     skuInput.value = '';
     nameInput.value = '';
     qtyInput.value = '1';
+    resetMarginFields();
     updatePreview();
     skuInput.focus();
   });
@@ -900,18 +931,19 @@
     return div.innerHTML;
   }
 
-  // 2in label width in px at 96 CSS px/in, minus the configured side
-  // margins on both sides and the inter-line gap allowance.
-  function printAvailWidthPx() {
-    var totalInches = 2 - (settings.padH * 2);
-    return totalInches * 96;
+  // 2in label width in px at 96 CSS px/in, minus the side margins.
+  // Takes a side-margin value so each label can use its own.
+  function printAvailWidthPx(padHVal) {
+    var h = (padHVal === undefined) ? (parseFloat(padH.value) || 0) : padHVal;
+    return (2 - (h * 2)) * 96;
   }
 
   function checkBatchFits() {
     var tooLong = [];
-    var availWidth = printAvailWidthPx();
     var gapPx = GAP_IN * 96;
     batch.forEach(function(item) {
+      var m = item.margins || DEFAULT_MARGINS;
+      var availWidth = printAvailWidthPx(m.padH);
       var result = settings.autoFit
         ? fitLabel(item.sku, item.name, settings.fontSku, settings.minNameFont, availWidth, gapPx)
         : { mode: 'one-line', skuPt: settings.fontSku, namePt: settings.fontSku };
@@ -923,15 +955,12 @@
   function buildPrintHtml() {
     var printArea = document.getElementById('print-area');
     printArea.innerHTML = '';
-    var rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--print-pad-top', settings.padTop + 'in');
-    rootStyle.setProperty('--print-pad-bottom', settings.padBottom + 'in');
-    rootStyle.setProperty('--print-pad-h', settings.padH + 'in');
 
-    var availWidth = printAvailWidthPx();
     var gapPx = GAP_IN * 96;
 
     batch.forEach(function(item) {
+      var m = item.margins || DEFAULT_MARGINS;
+      var availWidth = printAvailWidthPx(m.padH);
       var result = settings.autoFit
         ? fitLabel(item.sku, item.name, settings.fontSku, settings.minNameFont, availWidth, gapPx)
         : { mode: 'one-line', skuPt: settings.fontSku, namePt: settings.fontSku };
@@ -939,6 +968,10 @@
       for (var i = 0; i < item.qty; i++) {
         var labelDiv = document.createElement('div');
         labelDiv.className = 'print-label';
+        labelDiv.style.paddingTop = m.padTop + 'in';
+        labelDiv.style.paddingBottom = m.padBottom + 'in';
+        labelDiv.style.paddingLeft = m.padH + 'in';
+        labelDiv.style.paddingRight = m.padH + 'in';
 
         var lineClass = result.mode === 'two-line' ? 'print-line two-line' : 'print-line one-line';
         var lineHtml = function() {
@@ -971,7 +1004,13 @@
   window.addEventListener('afterprint', function() {
     var now = Date.now();
     batch.forEach(function(item) {
-      history.push({ sku: item.sku, name: item.name, qty: item.qty, ts: now });
+      history.push({
+        sku: item.sku,
+        name: item.name,
+        qty: item.qty,
+        margins: item.margins || DEFAULT_MARGINS,
+        ts: now
+      });
     });
     saveLS('vp_label_history', history);
     if (confirm('Impreso. \u00bfVaciar el lote actual?')) {
